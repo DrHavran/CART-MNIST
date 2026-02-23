@@ -1,4 +1,7 @@
 import java.util.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 
 public class Logic {
@@ -17,6 +20,9 @@ public class Logic {
     }
 
     private void generateATree(Node root) {
+        int cores = Runtime.getRuntime().availableProcessors();
+        ExecutorService executor = Executors.newFixedThreadPool(cores);
+
         ArrayList<Node> queue = new ArrayList<>();
         queue.add(root);
 
@@ -31,30 +37,57 @@ public class Logic {
             String bestAttribute = "";
             Check bestReq = null;
 
+            List<Double> weights = Collections.synchronizedList(new ArrayList<>());
+            List<String> attributesFinal = Collections.synchronizedList(new ArrayList<>());
+            List<Double> options = Collections.synchronizedList(new ArrayList<>());
+
+            ArrayList<Future<?>> futures = new ArrayList<>();
             for(String attribute : attributes){
-                System.out.println("checking attribute: " + attribute);
-                ArrayList<Double> values = new ArrayList<>();
-                for(HashMap<String, String> point : current.getPoints()){
-                    values.add(Double.parseDouble(point.get(attribute)));
-                }
+                futures.add(
+                        executor.submit(() -> {
+                            System.out.println("checking attribute: " + attribute);
+                            ArrayList<Double> values = new ArrayList<>();
+                            for(HashMap<String, String> point : current.getPoints()){
+                                values.add(Double.parseDouble(point.get(attribute)));
+                            }
 
-                values = values.stream().sorted().distinct().collect(Collectors.toCollection(ArrayList::new));
-                ArrayList<Double> options = new ArrayList<>();
-                for(int i = 0; i < values.size()-1; i++){
-                    options.add((values.get(i) + values.get(i+1)) / 2);
-                }
+                            values = values.stream().sorted().distinct().collect(Collectors.toCollection(ArrayList::new));
+                            for(int i = 0; i < values.size()-1; i++){
+                                double option = (values.get(i) + values.get(i+1)) / 2;
+                                Check req = (j) -> (Double.parseDouble((String) j) < option);
+                                double weight = count(current, attribute, req);
 
-                for(Double option : options){
-                    Check req = (i) -> (Double.parseDouble((String) i) < option);
-                    double weight = count(current, attribute, req);
-                    if(weight < bestWeight){
-                        bestWeight = weight;
-                        bestAttribute = attribute;
-                        bestOption = " < " + option;
-                        bestReq = req;
-                    }
+                                options.add(option);
+                                attributesFinal.add(attribute);
+                                weights.add(weight);
+                            }
+                        })
+                );
+            }
+
+
+            for (Future<?> f : futures) {
+                try{
+                    f.get();
+                }catch (Exception e){
+                    e.fillInStackTrace();
                 }
             }
+
+            System.out.println(weights.size() + " weights");
+            System.out.println(attributesFinal.size() + " attributes");
+            System.out.println(options.size() + " options");
+
+            for(int i = 0; i < weights.size(); i++){
+                Double weight = weights.get(i);
+                if(weight < bestWeight){
+                    bestWeight = weight;
+                    bestAttribute = attributesFinal.get(i);
+                    bestOption = " < " + options.get(i);
+                    bestReq = (j) -> (Double.parseDouble((String) j) < weight);
+                }
+            }
+
             Node left = new Node();
             Node right = new Node();
 
@@ -80,43 +113,7 @@ public class Logic {
                 queue.add(right);
             }
         }
-    }
-
-    private double count(Node current, String attribute, Check req){
-        ArrayList<HashMap<String, String>> leftBranch = new ArrayList<>();
-        ArrayList<HashMap<String, String>> rightBranch = new ArrayList<>();
-
-        for(HashMap<String, String> point : current.getPoints()){
-            if(req.check(point.get(attribute))){
-                leftBranch.add(point);
-            }else{
-                rightBranch.add(point);
-            }
-        }
-
-        return countWeight(leftBranch, rightBranch);
-    }
-    private double countWeight(ArrayList<HashMap<String, String>> left, ArrayList<HashMap<String, String>> right){
-        double total = left.size() + right.size();
-        return (left.size()/total) * countGini(left) + (right.size()/total) * countGini(right);
-    }
-    private double countGini(ArrayList<HashMap<String, String>> list){
-        String type = Settings.type;
-        HashMap<String, Double> types = new HashMap<>();
-        for(HashMap<String, String> point : list){
-            if(types.containsKey(point.get(type))){
-                types.replace(point.get(type), types.get(point.get(type)) + 1);
-            }else{
-                types.put(point.get(type), 1.0);
-            }
-        }
-
-        double total = 0;
-        for(Double number : types.values()){
-            total += (Math.pow(number/list.size(), 2));
-        }
-
-        return 1 - total;
+        executor.shutdown();
     }
 
     private void printATree() {
@@ -195,6 +192,42 @@ public class Logic {
         System.out.println("Success rate is " + (correctCount/data.getTestPoints().size())*100 + "%");
     }
 
+    private double count(Node current, String attribute, Check req){
+        ArrayList<HashMap<String, String>> leftBranch = new ArrayList<>();
+        ArrayList<HashMap<String, String>> rightBranch = new ArrayList<>();
+
+        for(HashMap<String, String> point : current.getPoints()){
+            if(req.check(point.get(attribute))){
+                leftBranch.add(point);
+            }else{
+                rightBranch.add(point);
+            }
+        }
+
+        return countWeight(leftBranch, rightBranch);
+    }
+    private double countWeight(ArrayList<HashMap<String, String>> left, ArrayList<HashMap<String, String>> right){
+        double total = left.size() + right.size();
+        return (left.size()/total) * countGini(left) + (right.size()/total) * countGini(right);
+    }
+    private double countGini(ArrayList<HashMap<String, String>> list){
+        String type = Settings.type;
+        HashMap<String, Double> types = new HashMap<>();
+        for(HashMap<String, String> point : list){
+            if(types.containsKey(point.get(type))){
+                types.replace(point.get(type), types.get(point.get(type)) + 1);
+            }else{
+                types.put(point.get(type), 1.0);
+            }
+        }
+
+        double total = 0;
+        for(Double number : types.values()){
+            total += (Math.pow(number/list.size(), 2));
+        }
+
+        return 1 - total;
+    }
     private Node getLeaf(Node node, HashMap<String, String> point){
         Node current = node;
 
