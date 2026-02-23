@@ -25,6 +25,7 @@ public class Logic {
 
                 int pixelRatio = input.getHeight() / Settings.outputSize;
                 StringBuilder output = new StringBuilder();
+                output.append(Settings.Class).append(",");
                 int count = 0;
 
                 int r = 0; int g = 0; int b = 0;

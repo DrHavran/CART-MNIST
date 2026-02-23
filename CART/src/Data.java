@@ -13,7 +13,7 @@ public class Data {
         this.attributes = new ArrayList<>();
         this.roots = new ArrayList<>();
         loadData(points, "train_" + Settings.dataset + ".csv");
-        loadData(testPoints, "test_" + Settings.dataset +" .csv");
+        loadData(testPoints, "test_" + Settings.dataset + ".csv");
         System.out.println(points.size() + " points loaded");
         System.out.println(testPoints.size() + " test points loaded");
 
@@ -62,15 +62,6 @@ public class Data {
         }
     }
 
-    public boolean answer(){
-        try{
-            double check = Double.parseDouble(points.getFirst().get(Settings.type));
-            System.out.println(check);
-            return true;
-        }catch (NumberFormatException e){
-            return false;
-        }
-    }
     public ArrayList<Node> getRoots(){ return roots; }
     public ArrayList<HashMap<String, String>> getTestPoints() {
         return testPoints;

@@ -3,11 +3,9 @@ import java.util.stream.Collectors;
 
 public class Logic {
     private final Data data;
-    private final boolean numberAnswer;
 
     public Logic() {
         this.data = new Data();
-        numberAnswer = data.answer();
 
         for(Node root : data.getRoots()){
             generateATree(root);
@@ -22,6 +20,9 @@ public class Logic {
         ArrayList<Node> queue = new ArrayList<>();
         queue.add(root);
 
+        ArrayList<String> attributes  = new ArrayList<>(data.getAttributes());
+        attributes.remove(Settings.type);
+
         while(!queue.isEmpty()) {
             Node current = queue.removeFirst();
 
@@ -30,45 +31,27 @@ public class Logic {
             String bestAttribute = "";
             Check bestReq = null;
 
-            ArrayList<String> attributes  = new ArrayList<>(data.getAttributes());
-            attributes.remove(Settings.type);
-            attributes.remove(Settings.name);
-
             for(String attribute : attributes){
-                try{
-                    ArrayList<Double> values = new ArrayList<>();
-                    for(HashMap<String, String> point : current.getPoints()){
-                        values.add(Double.parseDouble(point.get(attribute)));
-                    }
-                    values = values.stream().sorted().collect(Collectors.toCollection(ArrayList::new));
-                    ArrayList<Double> options = new ArrayList<>();
-                    for(int i = 0; i < values.size()-1; i++){
-                        options.add((values.get(i) + values.get(i+1)) / 2);
-                    }
-                    for(Double option : options){
-                        Check req = (i) -> (Double.parseDouble((String) i) < option);
-                        double weight = count(current, attribute, req);
-                        if(weight < bestWeight){
-                            bestWeight = weight;
-                            bestAttribute = attribute;
-                            bestOption = " < " + option;
-                            bestReq = req;
-                        }
-                    }
-                }catch (NumberFormatException e){
-                    HashSet<String> options = new HashSet<>();
-                    for(HashMap<String, String> point : current.getPoints()){
-                        options.add(point.get(attribute));
-                    }
-                    for(String option : options){
-                        Check req = (i) -> (i.equals(option));
-                        double weight = count(current, attribute, req);
-                        if(weight < bestWeight){
-                            bestWeight = weight;
-                            bestAttribute = attribute;
-                            bestOption = " = " + option;
-                            bestReq = req;
-                        }
+                System.out.println("checking attribute: " + attribute);
+                ArrayList<Double> values = new ArrayList<>();
+                for(HashMap<String, String> point : current.getPoints()){
+                    values.add(Double.parseDouble(point.get(attribute)));
+                }
+
+                values = values.stream().sorted().distinct().collect(Collectors.toCollection(ArrayList::new));
+                ArrayList<Double> options = new ArrayList<>();
+                for(int i = 0; i < values.size()-1; i++){
+                    options.add((values.get(i) + values.get(i+1)) / 2);
+                }
+
+                for(Double option : options){
+                    Check req = (i) -> (Double.parseDouble((String) i) < option);
+                    double weight = count(current, attribute, req);
+                    if(weight < bestWeight){
+                        bestWeight = weight;
+                        bestAttribute = attribute;
+                        bestOption = " < " + option;
+                        bestReq = req;
                     }
                 }
             }
@@ -90,20 +73,11 @@ public class Logic {
                 }
             }
 
-            if(numberAnswer){
-                if(left.getPoints().size() > Settings.minLeafs){
-                    queue.add(left);
-                }
-                if(right.getPoints().size() > Settings.minLeafs){
-                    queue.add(right);
-                }
-            }else{
-                if(countGini(left.getPoints()) != 0){
-                    queue.add(left);
-                }
-                if(countGini(right.getPoints()) != 0){
-                    queue.add(right);
-                }
+            if(countGini(left.getPoints()) != 0){
+                queue.add(left);
+            }
+            if(countGini(right.getPoints()) != 0){
+                queue.add(right);
             }
         }
     }
@@ -174,79 +148,51 @@ public class Logic {
             printNode(node.getRightBranch(), childPrefix, true);
         } else {
             System.out.print("[");
-            node.getPoints().forEach(x ->
-                    System.out.print(x.get(Settings.name) + " ")
-            );
-            if(numberAnswer){
-                double count = 0;
-                for(HashMap<String, String> point : node.getPoints()){
-                    count += Double.parseDouble(point.get(Settings.type));
-                }
-                System.out.print("- average: " + count/node.getPoints().size());
-            }else{
-                System.out.print("- " + node.getPoints().getFirst().get(Settings.type));
-            }
+            System.out.print(node.getPoints().size() + "x - " + node.getPoints().getFirst().get(Settings.type));
             System.out.println("]");
         }
     }
 
     private void testTheTree(ArrayList<Node> roots){
         System.out.println();
+        double correctCount = 0;
         for(HashMap<String, String> point : data.getTestPoints()){
 
-            ArrayList<Double> numberResults = new ArrayList<>();
             HashMap<String, Integer> stringResults = new HashMap<>();
             for(Node root : roots){
-
                 Node leaf = getLeaf(root, point);
 
-                if(numberAnswer){
-                    double count = 0;
-                    for(HashMap<String, String> data : leaf.getPoints()){
-                        count += Double.parseDouble(data.get(Settings.type));
-                    }
-                    numberResults.add(count/leaf.getPoints().size());
+                String type = leaf.getPoints().getFirst().get(Settings.type);
+                if(roots.size() != 1){
+                    System.out.println("subtree guess: " + type);
+                }
+                if(stringResults.containsKey(type)){
+                    stringResults.replace(type, stringResults.get(type) + 1);
                 }else{
-                    String type = leaf.getPoints().getFirst().get(Settings.type);
-                    if(roots.size() != 1){
-                        System.out.println("subtree guess: " + type);
-                    }
-                    if(stringResults.containsKey(type)){
-                        stringResults.replace(type, stringResults.get(type) + 1);
-                    }else{
-                        stringResults.put(type, 1);
-                    }
+                    stringResults.put(type, 1);
                 }
             }
 
-            if(numberAnswer){
-                double count = 0;
-                for(Double number : numberResults){
-                    count += number;
-                }
-                System.out.print("The tree guessed that " + point.get(Settings.name) + " is around " + count/numberResults.size());
-                System.out.println(", the real answer was " + point.get(Settings.type));
-            }else{
-                int maxNumb = 0;
-                String maxString = "";
+            int maxNumb = 0;
+            String maxString = "";
 
-                for(Map.Entry<String, Integer> entry : stringResults.entrySet()){
-                    if(entry.getValue() > maxNumb){
-                        maxString = entry.getKey();
-                        maxNumb = entry.getValue();
-                    }
+            for(Map.Entry<String, Integer> entry : stringResults.entrySet()){
+                if(entry.getValue() > maxNumb){
+                    maxString = entry.getKey();
+                    maxNumb = entry.getValue();
                 }
+            }
 
-                String predicted = maxString;
-                String actual = point.get(Settings.type);
-                System.out.print("The tree guessed that " + point.get(Settings.name) + " is " + predicted);
-                if (Objects.equals(predicted, actual)) {
-                    System.out.println(" and it's true!");
-                } else {
-                    System.out.println(" and it's false!, correct option is " + actual);
-                }
+            String predicted = maxString;
+            String actual = point.get(Settings.type);
+            if (Objects.equals(predicted, actual)) {
+                correctCount++;
+            } else {
+                System.out.print("The tree guessed that " + point.get(Settings.type) + " is " + predicted);
+                System.out.println(" and it's false!, correct option is " + actual);
             }
         }
+        System.out.println("Success rate is " + (correctCount/data.getTestPoints().size())*100 + "%");
     }
 
     private Node getLeaf(Node node, HashMap<String, String> point){

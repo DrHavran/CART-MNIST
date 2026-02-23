@@ -4,7 +4,7 @@ import java.util.Arrays;
 
 public class Data {
 
-    private ArrayList<File> images;
+    private final ArrayList<File> images;
 
     public Data() {
         this.images = new ArrayList<>();
