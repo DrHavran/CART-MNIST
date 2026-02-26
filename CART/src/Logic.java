@@ -32,39 +32,37 @@ public class Logic {
         while(!queue.isEmpty()) {
             Node current = queue.removeFirst();
 
-            double bestWeight = Double.MAX_VALUE;
-            String bestOption = "";
-            String bestAttribute = "";
-            Check bestReq = null;
-
-            List<Double> weights = Collections.synchronizedList(new ArrayList<>());
-            List<String> attributesFinal = Collections.synchronizedList(new ArrayList<>());
-            List<Double> options = Collections.synchronizedList(new ArrayList<>());
+            Double[] weights = new Double[attributes.size()];
+            String[] attributesFinal = new String[attributes.size()];
+            Double[] options = new Double[attributes.size()];
 
             ArrayList<Future<?>> futures = new ArrayList<>();
-            for(String attribute : attributes){
+            for(int i = 0; i < attributes.size(); i++) {
+                int finalI = i;
                 futures.add(
                         executor.submit(() -> {
-                            System.out.println("checking attribute: " + attribute);
+                            System.out.println("Checking attribute: " + attributes.get(finalI));
                             ArrayList<Double> values = new ArrayList<>();
                             for(HashMap<String, String> point : current.getPoints()){
-                                values.add(Double.parseDouble(point.get(attribute)));
+                                values.add(Double.parseDouble(point.get(attributes.get(finalI))));
                             }
 
                             values = values.stream().sorted().distinct().collect(Collectors.toCollection(ArrayList::new));
-                            for(int i = 0; i < values.size()-1; i++){
-                                double option = (values.get(i) + values.get(i+1)) / 2;
-                                Check req = (j) -> (Double.parseDouble((String) j) < option);
-                                double weight = count(current, attribute, req);
-
-                                options.add(option);
-                                attributesFinal.add(attribute);
-                                weights.add(weight);
+                            double bestWeight = Double.MAX_VALUE;
+                            for(int j = 0; j < values.size()-1; j++){
+                                double option = (values.get(j) + values.get(j+1)) / 2;
+                                Check req = (k) -> (Double.parseDouble((String) k) < option);
+                                double weight = count(current, attributes.get(finalI), req);
+                                if(weight < bestWeight){
+                                    options[finalI] = option;
+                                    attributesFinal[finalI] = attributes.get(finalI);
+                                    weights[finalI] = weight;
+                                    bestWeight = weight;
+                                }
                             }
                         })
                 );
             }
-
 
             for (Future<?> f : futures) {
                 try{
@@ -74,17 +72,20 @@ public class Logic {
                 }
             }
 
-            System.out.println(weights.size() + " weights");
-            System.out.println(attributesFinal.size() + " attributes");
-            System.out.println(options.size() + " options");
+            double bestWeight = Double.MAX_VALUE;
+            String bestOption = "";
+            String bestAttribute = "";
+            Check bestReq = null;
 
-            for(int i = 0; i < weights.size(); i++){
-                Double weight = weights.get(i);
+            for(int i = 0; i < weights.length; i++){
+                Double weight = weights[i];
+                if (weight == null) continue;
                 if(weight < bestWeight){
+                    Double option = options[i];
                     bestWeight = weight;
-                    bestAttribute = attributesFinal.get(i);
-                    bestOption = " < " + options.get(i);
-                    bestReq = (j) -> (Double.parseDouble((String) j) < weight);
+                    bestAttribute = attributesFinal[i];
+                    bestOption = " < " + option;
+                    bestReq = (j) -> (Double.parseDouble((String) j) < option);
                 }
             }
 
